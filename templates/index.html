@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Wait Time Predictor</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; padding: 40px; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+        h2 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        
+        .btn-predict { background-color: #28a745; color: white; margin-top: 10px; }
+        .btn-predict:hover { background-color: #218838; }
+        
+        #result-card { margin-top: 25px; padding: 15px; border-radius: 8px; text-align: center; display: none; }
+        .prediction-text { font-size: 1.2em; color: #007bff; font-weight: bold; }
+        
+        .feedback-box { margin-top: 20px; padding: 20px; background-color: #e9ecef; border-radius: 8px; display: none; }
+        .btn-feedback { background-color: #007bff; color: white; margin-top: 10px; }
+        .btn-feedback:hover { background-color: #0069d9; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>OPD Wait Predictor</h2>
+    
+    <div class="form-group">
+        <label>Total Patients in Queue</label>
+        <input type="number" id="num_patients" placeholder="e.g. 50">
+    </div>
+    <div class="form-group">
+        <label>Available Doctors</label>
+        <input type="number" id="num_doctors" placeholder="e.g. 4">
+    </div>
+    <div class="form-group">
+        <label>OPD Start Hour (24h format)</label>
+        <input type="number" id="opd_start_hour" placeholder="e.g. 9">
+    </div>
+    <div class="form-group">
+        <label>Is it a Weekend?</label>
+        <select id="is_weekend">
+            <option value="0">No (Weekday)</option>
+            <option value="1">Yes (Weekend)</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Active Emergency in Hospital?</label>
+        <select id="emergency_active">
+            <option value="0">No</option>
+            <option value="1">Yes (Heavy Buffer)</option>
+        </select>
+    </div>
+
+    <button class="btn-predict" onclick="getPrediction()">Get Wait Time Prediction</button>
+
+    <div id="result-card">
+        <p>Estimated Waiting Time:</p>
+        <div class="prediction-text" id="prediction_val">--</div>
+        <p style="font-size: 0.8em; color: #777;">Record ID: <span id="visit_id_display"></span></p>
+    </div>
+
+    <div id="feedback-section" class="feedback-box">
+        <label><b>Real Outcome:</b> How long did the patient actually wait?</label>
+        <input type="number" id="actual_time" placeholder="Minutes">
+        <button class="btn-feedback" onclick="submitFeedback()">Submit Real Time to Model</button>
+        <p style="font-size: 0.75em; color: #666; margin-top: 10px;">
+            Note: The model will only learn from this real value.
+        </p>
+    </div>
+</div>
+
+<script>
+    let currentVisitId = null;
+
+    async function getPrediction() {
+        const data = {
+            num_patients: document.getElementById('num_patients').value,
+            num_doctors: document.getElementById('num_doctors').value,
+            opd_start_hour: document.getElementById('opd_start_hour').value,
+            is_weekend: document.getElementById('is_weekend').value,
+            emergency_active: document.getElementById('emergency_active').value
+        };
+
+        // Check for empty inputs
+        if(!data.num_patients || !data.num_doctors) {
+            alert("Please fill in the patient and doctor counts.");
+            return;
+        }
+
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            
+            // Store the ID for the feedback phase
+            currentVisitId = result.visit_id;
+            
+            // UI Updates
+            document.getElementById('prediction_val').innerText = result.prediction + " Minutes";
+            document.getElementById('visit_id_display').innerText = result.visit_id;
+            document.getElementById('result-card').style.display = 'block';
+            document.getElementById('feedback-section').style.display = 'block';
+            
+            // Scroll to result
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Connection to server failed.");
+        }
+    }
+
+    async function submitFeedback() {
+        const actualTime = document.getElementById('actual_time').value;
+        
+        if(!actualTime) {
+            alert("Please enter the real waiting time.");
+            return;
+        }
+
+        try {
+            const response = await fetch('/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    visit_id: currentVisitId,
+                    actual_waiting_time: actualTime
+                })
+            });
+
+            const result = await response.json();
+            alert("Success: " + result.message);
+            
+            // Reset for next entry
+            document.getElementById('feedback-section').style.display = 'none';
+            document.getElementById('actual_time').value = "";
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Failed to submit feedback.");
+        }
+    }
+</script>
+
+</body>
+</html>
