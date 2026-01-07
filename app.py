@@ -48,6 +48,30 @@ def get_trained_model():
     model.fit(X, y)
     return model
 
+def init_db():
+    conn = sqlite3.connect('hospital_feedback.db')
+    cursor = conn.cursor()
+    # This creates the table with your exact columns from the image
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS opd_visits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            num_patients INTEGER,
+            num_doctors INTEGER,
+            opd_start_hour INTEGER,
+            is_weekend INTEGER
+        )
+    ''')
+    # If the table is empty, let's add your sample data so it works immediately
+    cursor.execute("SELECT COUNT(*) FROM opd_visits")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO opd_visits (num_patients, num_doctors, opd_start_hour, is_weekend) VALUES (10, 2, 9, 0)")
+    
+    conn.commit()
+    conn.close()
+
+# Run the setup function
+init_db()
+
 @app.route('/')
 def index():
     return render_template('index.html')
